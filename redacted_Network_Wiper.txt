@@ -1,0 +1,294 @@
+import serial
+import serial.tools.list_ports
+import time
+
+# Get a list of all ports
+portlist = list(serial.tools.list_ports.comports())
+
+for i in portlist:
+    print(i)
+    # Connect to proper usb port
+    if i.description.find("Prolific USB-to-Serial Comm Port") != -1:
+        correctPort = i
+print("______________________________________")
+
+
+
+# Function to erase the device once logged in, if we are already logged in, or after we log in
+def loggedInErase():
+    ser.write(b"erase all")
+    ser.write(b'\n')
+    time.sleep(0.5)
+    
+    while ser.in_waiting == 0:
+        pass
+    emptyCheck = ser.in_waiting
+    readInfo = ser.read(emptyCheck)
+    updateCheck = readInfo.decode()
+    print(updateCheck)
+                
+    if updateCheck.find("Continue") != -1:
+        print("++++++++++++++++ERASE ALL CONFIRMATION++++++++++++++++")
+        time.sleep(0.5)
+        ser.write(b"y")
+                 
+        print("____CONFIRMING ERASE______")
+
+        while ser.in_waiting == 0:
+            pass
+        emptyCheck = ser.in_waiting
+        readInfo = ser.read(emptyCheck)
+        updateCheck = readInfo.decode()
+        print(updateCheck)
+
+        passedInitialState = 1
+    else :
+        print("----------------trying erase startup-config instead--------------")
+        ser.write(b"erase startup-config")
+        ser.write(b'\n')
+
+        time.sleep(0.5)
+        print("Erasing all and entering")
+
+        while ser.in_waiting == 0:
+            pass
+        emptyCheck = ser.in_waiting
+        readInfo = ser.read(emptyCheck)
+        updateCheck = readInfo.decode()
+        print(updateCheck)
+                
+        if (updateCheck.find("Invalid input:") != -1):
+            print("Needs to reset stacking")
+            ser.write(b"stacking factory-reset")
+            ser.write(b'\n')
+            while ser.in_waiting == 0:
+                    pass
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+            print("Confirm reset stacking?")
+            time.sleep(0.5)
+            ser.write(b"y")
+            print("Erasing stacking, will be in the loop, have patience")
+        else :
+            time.sleep(0.5)
+            ser.write(b"y")
+
+            ("____CONFIRMING ERASE______")
+
+            while ser.in_waiting == 0:
+                pass
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+            passedInitialState = 1
+
+############# WHERE THE MAIN PROCESS STARTS ##########################################
+try:
+    print(correctPort)
+    ser = serial.Serial(f'{correctPort.device}', 9600, timeout=2)
+    passedInitialState = 0
+    sleepCount = 0
+    shockState = 0
+
+    while passedInitialState == 0:
+
+        #Shock the device to get into correct position in OS
+        if (shockState == 0):
+            time.sleep(1)
+            ser.write(b'\r\n')
+            print("ENTERED")
+            time.sleep(0.1)
+            ser.write(b'\r\n')
+            print("ENTERED")
+
+        while ser.in_waiting == 0:
+            sleepCount = sleepCount + 0.2
+            if sleepCount>4:
+                break
+            time.sleep(0.4)
+            pass        # Wait till we see a response
+        time.sleep(1)
+        emptyCheck = ser.in_waiting     # Bits of info
+        readInfo = ser.read(emptyCheck or 1)     # Store the bits
+        print("below is bit count")
+        print(emptyCheck)
+        updateCheck = readInfo.decode(errors='ignore')     # Decode the bits, if anything is wrong, leave it out
+        if emptyCheck != 0 and emptyCheck != 1:
+            print(emptyCheck)
+        #     print("ShockStatenow 1")
+            shockState = 1
+        else:
+            shockState = 0
+        #     print("ShockStatenow 0")
+
+        # print("BEFORE UPDATECHECK")
+        
+        print(updateCheck)      # Post
+        if (emptyCheck == 0):
+            print("fast")
+            time.sleep(0.5)
+        else:
+            time.sleep(2)
+
+        if updateCheck.find("Configure the manager credentials") != -1:
+            print("ALREADY CLEARED____ABORT MISSION")
+            passedInitialState = 1
+    
+        elif updateCheck.find("Username") != -1:
+            time.sleep(1)
+            while updateCheck.find("name") == -1:
+                time.sleep(0.1)
+                emptyCheck = ser.in_waiting
+                readInfo = ser.read(emptyCheck)
+                updateCheck = readInfo.decode()
+                print(updateCheck)
+
+            # changed from 5 to 3
+            time.sleep(3)
+            print("enter u and p")
+            # Input username
+            time.sleep(1)
+
+            ser.write(b"")  # REDACTED
+            time.sleep(0.5)
+            #print("USERNAMMMMMMME")
+            time.sleep(1)
+            #ser.flush()
+            ser.write(b"\n")
+            time.sleep(1)
+
+            time.sleep(0.5)
+
+            
+           # print("Did we get here")
+            time.sleep(0.5)
+            while updateCheck.find("Password") == -1:
+                time.sleep(0.1)
+                emptyCheck = ser.in_waiting
+                readInfo = ser.read(emptyCheck)
+                updateCheck = readInfo.decode()
+            #    print("Have we been here?")
+                print(updateCheck)
+            print("now its asking for password yay")
+            
+            time.sleep(1)
+            ser.write(b"") # REDACTED
+            time.sleep(0.5)
+            print("PASSWORD")
+            time.sleep(0.5)
+            # ser.flush()
+            ser.write(b"\n")
+            time.sleep(0.5)
+            # ser.flush()
+            time.sleep(1)
+
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck or 1)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+            time.sleep(0.5)
+
+            
+            # WE ARE NOW LOGGED IN!!!!
+            if updateCheck.find("#") != -1:
+                print("WE ARE LOGGED IN")
+                loggedInErase()
+
+            else:
+                print("Didn't log in correctly.")
+
+        elif updateCheck.find(">") != -1 and updateCheck.find("Speed Sense") == -1:
+            print("In unlogged in mode")
+            ser.write(b'\r\n')
+            time.sleep(0.2)
+            ser.write(b'\r\n')
+
+            while ser.in_waiting == 0:
+                pass
+            time.sleep(1)
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+
+            #ser.write(b"enable\n")
+            ser.write(b"exit\n")
+            time.sleep(0.3)
+            ser.write(b"y\n")
+
+            while ser.in_waiting == 0:
+                pass
+            time.sleep(1)
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+
+
+            ser.write(b'\r\n')
+            time.sleep(0.2)
+            ser.write(b'\r\n')
+        # Input username
+            ser.write(b"")    # REDACTED
+
+            ser.write(b'\n')
+            print("ENTERED USERNAME AND ENTER KEY")
+
+            time.sleep(1)
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+
+            # Input password
+            ser.write(b"") # REDACTED
+            ser.write(b'\n')
+            print("ENTERING PASSWORD AND ENTERING")
+
+            # while ser.in_waiting == 0:
+            #     pass
+            time.sleep(1)
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck)
+            updateCheck = readInfo.decode()
+            print("_____INPUTTING PASSWORD______")
+            print(updateCheck)
+
+
+            # WE ARE NOW LOGGED IN!!!!
+            if updateCheck.find("#") != -1:
+                # Case where we gotta deal with stacking
+                # if updateCheck.find("REDACTED") != -1:		# REDACTED
+
+
+                print("WE ARE LOGGED IN")
+                loggedInErase()
+
+
+        # Weird case where already logged in
+        elif updateCheck.find("#") != -1:
+            time.sleep(1)
+            print("WE ARE LOGGED IN ALREADY")
+            loggedInErase()
+
+
+        elif updateCheck.find("any key") != -1:
+            print("Enter any key state")
+            ser.write(b"b")
+            while ser.in_waiting == 0:
+                    pass
+            emptyCheck = ser.in_waiting
+            readInfo = ser.read(emptyCheck or 1)
+            updateCheck = readInfo.decode()
+            print(updateCheck)
+            print("LOOK FOR YOU HAVE NEVER PREVIOUSLY LOGGED IN, THEN END")
+
+
+except NameError as e:
+    print(f"Couldn't find a device\n\n{e}")
+
+except Exception as e:
+    print(e)
